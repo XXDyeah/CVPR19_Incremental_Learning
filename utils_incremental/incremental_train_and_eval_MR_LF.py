@@ -17,6 +17,8 @@ from PIL import Image
 from scipy.spatial.distance import cdist
 from sklearn.metrics import confusion_matrix
 from utils_pytorch import *
+from .cba import CBAModule
+from .tiaw import TIAWWeighting
 
 cur_features = []
 ref_features = []
@@ -43,7 +45,8 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
             iteration, start_iteration, \
             lamda, \
             dist, K, lw_mr, \
-            fix_bn=False, weight_per_class=None, device=None):
+            fix_bn=False, weight_per_class=None, device=None, \
+            cba_module: CBAModule = None, tiaw_module: TIAWWeighting = None):
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     #trainset.train_data = X_train.astype('uint8')
@@ -82,47 +85,70 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
         tg_lr_scheduler.step()
         print('\nEpoch: %d, LR: ' % epoch, end='')
         print(tg_lr_scheduler.get_lr())
-        for batch_idx, (inputs, targets) in enumerate(trainloader):
-            inputs, targets = inputs.to(device), targets.to(device)
+        for batch_idx, (inputs, targets, indices) in enumerate(trainloader):
+            inputs, targets, indices = inputs.to(device), targets.to(device), indices.to(device)
             tg_optimizer.zero_grad()
-            outputs = tg_model(inputs)
+
+            adv_x = adv_labels = adv_indices = None
+            if cba_module is not None:
+                adv = cba_module.generate(inputs, targets)
+                if adv is not None:
+                    adv_x, adv_labels, adv_indices = adv
+
+            if adv_x is not None:
+                all_inputs = torch.cat([inputs, adv_x])
+                all_indices = torch.cat([indices, adv_indices])
+            else:
+                all_inputs = inputs
+                all_indices = indices
+
+            outputs = tg_model(all_inputs)
+            probs = F.softmax(outputs.detach(), dim=1)
+            if tiaw_module is not None:
+                tiaw_module.update_history(all_indices, probs)
+                weights = tiaw_module.get_weights(all_indices)
+            else:
+                weights = torch.ones(all_inputs.size(0), device=device)
+
+            n_real = inputs.size(0)
+            real_logits = outputs[:n_real]
+            loss_real = nn.CrossEntropyLoss(weight_per_class, reduction='none')(real_logits, targets)
+            loss_vec = loss_real
+
+            if adv_x is not None:
+                adv_logits = outputs[n_real:]
+                adv_loss = cba_module.loss(adv_logits, adv_labels)
+                loss_vec = torch.cat([loss_vec, cba_module.lambda_cba * adv_loss])
+
+            loss_cls = (loss_vec * weights).mean()
+
             if iteration == start_iteration:
-                loss = nn.CrossEntropyLoss(weight_per_class)(outputs, targets)
+                loss = loss_cls
             else:
                 ref_outputs = ref_model(inputs)
-                loss1 = nn.CosineEmbeddingLoss()(cur_features, ref_features.detach(), \
+                loss1 = nn.CosineEmbeddingLoss()(cur_features[:n_real], ref_features.detach(), \
                     torch.ones(inputs.shape[0]).to(device)) * lamda
-                loss2 = nn.CrossEntropyLoss(weight_per_class)(outputs, targets)
                 #################################################
-                #scores before scale, [-1, 1]
-                outputs_bs = torch.cat((old_scores, new_scores), dim=1)
-                #print(tg_model.fc.fc1.in_features, tg_model.fc.fc1.out_features)
-                #print(tg_model.fc.fc2.in_features, tg_model.fc.fc2.out_features)
-                #print(old_scores.size(), new_scores.size(), outputs_bs.size(), outputs.size())
-                assert(outputs_bs.size()==outputs.size())
-                #get groud truth scores
+                outputs_bs = torch.cat((old_scores, new_scores), dim=1)[:n_real]
+                assert(outputs_bs.size(0) == inputs.size(0))
                 gt_index = torch.zeros(outputs_bs.size()).to(device)
                 gt_index = gt_index.scatter(1, targets.view(-1,1), 1).ge(0.5)
                 gt_scores = outputs_bs.masked_select(gt_index)
-                #get top-K scores on novel classes
                 max_novel_scores = outputs_bs[:, num_old_classes:].topk(K, dim=1)[0]
-                #the index of hard samples, i.e., samples of old classes
                 hard_index = targets.lt(num_old_classes)
                 hard_num = torch.nonzero(hard_index).size(0)
-                #print("hard examples size: ", hard_num)
                 if  hard_num > 0:
                     gt_scores = gt_scores[hard_index].view(-1, 1).repeat(1, K)
                     max_novel_scores = max_novel_scores[hard_index]
                     assert(gt_scores.size() == max_novel_scores.size())
                     assert(gt_scores.size(0) == hard_num)
-                    #print("hard example gt scores: ", gt_scores.size(), gt_scores)
-                    #print("hard example max novel scores: ", max_novel_scores.size(), max_novel_scores)
                     loss3 = nn.MarginRankingLoss(margin=dist)(gt_scores.view(-1, 1), \
                         max_novel_scores.view(-1, 1), torch.ones(hard_num*K).to(device)) * lw_mr
                 else:
                     loss3 = torch.zeros(1).to(device)
                 #################################################
-                loss = loss1 + loss2 + loss3
+                loss2 = (loss_real * weights[:n_real]).mean()
+                loss = loss1 + loss_cls + loss3
             loss.backward()
             tg_optimizer.step()
 
@@ -131,7 +157,7 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
                 train_loss1 += loss1.item()
                 train_loss2 += loss2.item()
                 train_loss3 += loss3.item()
-            _, predicted = outputs.max(1)
+            _, predicted = real_logits.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
