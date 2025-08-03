@@ -103,12 +103,25 @@ top1_acc_list_ori   = np.zeros((int(args.num_classes/args.nb_cl),3,args.nb_runs)
 # access the contemporary attributes while keeping backward compatibility by
 # falling back to the legacy names if required.
 
+# Helper to transparently access dataset attributes across torchvision versions
+def _compat_attr(ds, primary, legacy):
+    """Return ``ds.primary`` if present otherwise ``ds.legacy``.
+
+    Older torchvision releases stored CIFAR data/labels in ``train_data``/``train_labels``
+    and ``test_data``/``test_labels`` whereas newer versions use ``data`` and
+    ``targets``.  This helper keeps the code agnostic to the version by
+    falling back to the legacy attribute when the contemporary one does not
+    exist.
+    """
+
+    return getattr(ds, primary, getattr(ds, legacy))
+
 # Training data and labels
-X_train_total = np.array(getattr(trainset, 'data', trainset.train_data))
-Y_train_total = np.array(getattr(trainset, 'targets', trainset.train_labels))
+X_train_total = np.array(_compat_attr(trainset, 'data', 'train_data'))
+Y_train_total = np.array(_compat_attr(trainset, 'targets', 'train_labels'))
 # Validation data and labels
-X_valid_total = np.array(getattr(testset, 'data', testset.test_data))
-Y_valid_total = np.array(getattr(testset, 'targets', testset.test_labels))
+X_valid_total = np.array(_compat_attr(testset, 'data', 'test_data'))
+Y_valid_total = np.array(_compat_attr(testset, 'targets', 'test_labels'))
 
 # Launch the different runs
 for iteration_total in range(args.nb_runs):
@@ -210,7 +223,7 @@ for iteration_total in range(args.nb_runs):
         # releases use `train_data` and `train_labels`.  Assign to both when
         # available to remain compatible across versions.
         trainset.data = X_train.astype('uint8')
-        trainset.targets = map_Y_train.tolist()
+        trainset.targets = map_Y_train
         if hasattr(trainset, 'train_data'):
             trainset.train_data = trainset.data
         if hasattr(trainset, 'train_labels'):
@@ -228,7 +241,7 @@ for iteration_total in range(args.nb_runs):
                 shuffle=True, num_workers=2)
         # Likewise update the evaluation dataset
         testset.data = X_valid_cumul.astype('uint8')
-        testset.targets = map_Y_valid_cumul.tolist()
+        testset.targets = map_Y_valid_cumul
         if hasattr(testset, 'test_data'):
             testset.test_data = testset.data
         if hasattr(testset, 'test_labels'):
@@ -272,7 +285,7 @@ for iteration_total in range(args.nb_runs):
         for iter_dico in range(last_iter*args.nb_cl, (iteration+1)*args.nb_cl):
             # Possible exemplars in the feature space and projected on the L2 sphere
             evalset.data = prototypes[iter_dico].astype('uint8')
-            evalset.targets = np.zeros(evalset.data.shape[0]).tolist()  # zero labels
+            evalset.targets = np.zeros(evalset.data.shape[0])  # zero labels
             if hasattr(evalset, 'test_data'):
                 evalset.test_data = evalset.data
             if hasattr(evalset, 'test_labels'):
@@ -314,7 +327,7 @@ for iteration_total in range(args.nb_runs):
 
                 # Collect data in the feature space for each class
                 evalset.data = prototypes[iteration2*args.nb_cl+iter_dico].astype('uint8')
-                evalset.targets = np.zeros(evalset.data.shape[0]).tolist()  # zero labels
+                evalset.targets = np.zeros(evalset.data.shape[0])  # zero labels
                 if hasattr(evalset, 'test_data'):
                     evalset.test_data = evalset.data
                 if hasattr(evalset, 'test_labels'):
@@ -358,7 +371,7 @@ for iteration_total in range(args.nb_runs):
         map_Y_valid_ori = np.array([order_list.index(i) for i in Y_valid_ori])
         print('Computing accuracy on the original batch of classes...')
         evalset.data = X_valid_ori.astype('uint8')
-        evalset.targets = map_Y_valid_ori.tolist()
+        evalset.targets = map_Y_valid_ori
         if hasattr(evalset, 'test_data'):
             evalset.test_data = evalset.data
         if hasattr(evalset, 'test_labels'):
@@ -372,7 +385,7 @@ for iteration_total in range(args.nb_runs):
         map_Y_valid_cumul = np.array([order_list.index(i) for i in Y_valid_cumul])
         print('Computing cumulative accuracy...')
         evalset.data = X_valid_cumul.astype('uint8')
-        evalset.targets = map_Y_valid_cumul.tolist()
+        evalset.targets = map_Y_valid_cumul
         if hasattr(evalset, 'test_data'):
             evalset.test_data = evalset.data
         if hasattr(evalset, 'test_labels'):
