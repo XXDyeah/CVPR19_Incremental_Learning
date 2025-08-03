@@ -53,15 +53,25 @@ transform_test = transforms.Compose([
 ])
 evalset = torchvision.datasets.CIFAR100(root='./data', train=False,
                                        download=False, transform=transform_test)
-# In recent versions of torchvision the evaluation data/labels are stored in
-# `data` and `targets`.  Fall back to the old attribute names for backward
-# compatibility.
-input_data = getattr(evalset, 'data', evalset.test_data)
-input_labels = getattr(evalset, 'targets', evalset.test_labels)
+
+
+def _compat_attr(ds, primary, legacy):
+    """Return ``ds.primary`` if present otherwise ``ds.legacy``.
+
+    Mirrors the helper used during training to seamlessly access dataset
+    attributes regardless of the torchvision version.
+    """
+
+    return getattr(ds, primary, getattr(ds, legacy))
+
+
+# Retrieve the evaluation data/labels in a version-agnostic fashion
+input_data = np.array(_compat_attr(evalset, 'data', 'test_data'))
+input_labels = np.array(_compat_attr(evalset, 'targets', 'test_labels'))
 map_input_labels = np.array([order_list.index(i) for i in input_labels])
-# Update the dataset with mapped labels to ensure consistency.
+# Update the dataset with mapped labels to ensure consistency across versions
 evalset.data = input_data
-evalset.targets = map_input_labels.tolist()
+evalset.targets = map_input_labels
 if hasattr(evalset, 'test_data'):
     evalset.test_data = evalset.data
 if hasattr(evalset, 'test_labels'):
@@ -87,7 +97,7 @@ for iteration in range(start_iter, int(100/nb_cl)):
     current_means = class_means[:, order[:(iteration+1)*nb_cl]]
     indices = np.array([i in range(0, (iteration+1)*nb_cl) for i in map_input_labels])
     evalset.data = input_data[indices]
-    evalset.targets = map_input_labels[indices].tolist()
+    evalset.targets = map_input_labels[indices]
     if hasattr(evalset, 'test_data'):
         evalset.test_data = evalset.data
     if hasattr(evalset, 'test_labels'):
