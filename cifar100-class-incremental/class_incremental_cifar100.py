@@ -114,7 +114,11 @@ def _compat_attr(ds, primary, legacy):
     exist.
     """
 
-    return getattr(ds, primary, getattr(ds, legacy))
+    if hasattr(ds, primary):
+        return getattr(ds, primary)
+    if hasattr(ds, legacy):
+        return getattr(ds, legacy)
+    raise AttributeError(f"{type(ds).__name__} lacks '{primary}' and '{legacy}'")
 
 # Training data and labels
 X_train_total = np.array(_compat_attr(trainset, 'data', 'train_data'))
