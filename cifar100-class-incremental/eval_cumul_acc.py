@@ -62,7 +62,11 @@ def _compat_attr(ds, primary, legacy):
     attributes regardless of the torchvision version.
     """
 
-    return getattr(ds, primary, getattr(ds, legacy))
+    if hasattr(ds, primary):
+        return getattr(ds, primary)
+    if hasattr(ds, legacy):
+        return getattr(ds, legacy)
+    raise AttributeError(f"{type(ds).__name__} lacks '{primary}' and '{legacy}'")
 
 
 # Retrieve the evaluation data/labels in a version-agnostic fashion
