@@ -16,7 +16,7 @@ import argparse
 from PIL import Image
 from scipy.spatial.distance import cdist
 from sklearn.metrics import confusion_matrix
-from utils_pytorch import *
+# from utils_pytorch import *
 
 def compute_accuracy(tg_model, tg_feature_model, class_means, evalloader, scale=None, print_info=True, device=None):
     if device is None:
@@ -49,7 +49,8 @@ def compute_accuracy(tg_model, tg_feature_model, class_means, evalloader, scale=
             _, predicted = outputs.max(1)
             correct += predicted.eq(targets).sum().item()
 
-            outputs_feature = np.squeeze(tg_feature_model(inputs))
+            # outputs_feature = np.squeeze(tg_feature_model(inputs))
+            outputs_feature = np.squeeze(tg_feature_model(inputs).detach().cpu().numpy())
             # Compute score for iCaRL
             sqd_icarl = cdist(class_means[:,:,0].T, outputs_feature, 'sqeuclidean')
             score_icarl = torch.from_numpy((-sqd_icarl).T).to(device)
