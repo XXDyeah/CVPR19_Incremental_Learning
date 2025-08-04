@@ -34,7 +34,6 @@ from utils_incremental.incremental_train_and_eval_MS import incremental_train_an
 from utils_incremental.incremental_train_and_eval_LF import incremental_train_and_eval_LF
 from utils_incremental.incremental_train_and_eval_MR_LF import incremental_train_and_eval_MR_LF
 from utils_incremental.incremental_train_and_eval_AMR_LF import incremental_train_and_eval_AMR_LF
-from utils_incremental.dataset import collate_with_soft_targets
 
 ######### Modifiable Settings ##########
 parser = argparse.ArgumentParser()
@@ -343,14 +342,12 @@ for iteration_total in range(args.nb_runs):
             #trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, \
             #    shuffle=False, sampler=train_sampler, num_workers=2)
             trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, \
-                shuffle=False, sampler=train_sampler, num_workers=args.num_workers, pin_memory=True,
-                collate_fn=collate_with_soft_targets)
+                shuffle=False, sampler=train_sampler, num_workers=args.num_workers, pin_memory=True)             
         else:
             #trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size,
             #    shuffle=True, num_workers=2)
             trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size,
-                shuffle=True, num_workers=args.num_workers, pin_memory=True,
-                collate_fn=collate_with_soft_targets)
+                shuffle=True, num_workers=args.num_workers, pin_memory=True)
         #testset.test_data = X_valid_cumul.astype('uint8')
         #testset.test_labels = map_Y_valid_cumul
         current_test_imgs = merge_images_labels(X_valid_cumul, map_Y_valid_cumul)

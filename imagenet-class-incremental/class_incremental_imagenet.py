@@ -27,7 +27,6 @@ from utils_incremental.compute_features import compute_features
 from utils_incremental.compute_accuracy import compute_accuracy
 from utils_incremental.compute_confusion_matrix import compute_confusion_matrix
 from utils_incremental.incremental_train_and_eval import incremental_train_and_eval
-from utils_incremental.dataset import collate_with_soft_targets
 
 ######### Modifiable Settings ##########
 parser = argparse.ArgumentParser()
@@ -242,14 +241,12 @@ for iteration_total in range(args.nb_runs):
             #trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, \
             #    shuffle=False, sampler=train_sampler, num_workers=2)
             trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, \
-                shuffle=False, sampler=train_sampler, num_workers=args.num_workers, pin_memory=True,
-                collate_fn=collate_with_soft_targets)
+                shuffle=False, sampler=train_sampler, num_workers=args.num_workers, pin_memory=True)             
         else:
             #trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size,
             #    shuffle=True, num_workers=2)
             trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size,
-                shuffle=True, num_workers=args.num_workers, pin_memory=True,
-                collate_fn=collate_with_soft_targets)
+                shuffle=True, num_workers=args.num_workers, pin_memory=True)
         #testset.test_data = X_valid_cumul.astype('uint8')
         #testset.test_labels = map_Y_valid_cumul
         current_test_images = merge_images_labels(X_valid_cumul, map_Y_valid_cumul)
