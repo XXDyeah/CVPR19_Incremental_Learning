@@ -70,16 +70,16 @@ parser.add_argument('--lw_ms', default=1, type=float, \
 #improved class incremental learning
 parser.add_argument('--rs_ratio', default=0, type=float, \
     help='The ratio for resample')
-parser.add_argument('--imprint_weights', action='store_true', \
-    help='Imprint the weights for novel classes')
-parser.add_argument('--less_forget', action='store_true', \
-    help='Less forgetful')
+parser.add_argument('--imprint_weights', default=True, action='store_true', \
+    help='Imprint the weights for novel classes')  # ###############################################
+parser.add_argument('--less_forget', default=True, action='store_true', \
+    help='Less forgetful')  # ###############################################
 parser.add_argument('--lamda', default=5, type=float, \
     help='Lamda for LF')
-parser.add_argument('--adapt_lamda', action='store_true', \
-    help='Adaptively change lamda')
-parser.add_argument('--mr_loss', action='store_true', \
-    help='Margin ranking loss v1')
+parser.add_argument('--adapt_lamda', default=True, action='store_true', \
+    help='Adaptively change lamda')  # ###############################################
+parser.add_argument('--mr_loss', default=True, action='store_true', \
+    help='Margin ranking loss v1')  # ###############################################
 parser.add_argument('--amr_loss', action='store_true', \
     help='Margin ranking loss v2')
 parser.add_argument('--dist', default=0.5, type=float, \
