@@ -21,6 +21,10 @@ from utils_pytorch import *
 def compute_accuracy(tg_model, tg_feature_model, class_means, evalloader, scale=None, print_info=True, device=None):
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # Move models to the desired device to prevent device mismatch errors when
+    # inputs are on GPU.
+    tg_model = tg_model.to(device)
+    tg_feature_model = tg_feature_model.to(device)
     tg_model.eval()
     tg_feature_model.eval()
 
@@ -43,9 +47,11 @@ def compute_accuracy(tg_model, tg_feature_model, class_means, evalloader, scale=
             outputs = tg_model(inputs)
             outputs = F.softmax(outputs, dim=1)
             if scale is not None:
-                assert(scale.shape[0] == 1)
-                assert(outputs.shape[1] == scale.shape[1])
-                outputs = outputs / scale.repeat(outputs.shape[0], 1).type(torch.FloatTensor).to(device)
+                assert scale.shape[0] == 1
+                assert outputs.shape[1] == scale.shape[1]
+                outputs = outputs / scale.repeat(outputs.shape[0], 1).type(
+                    torch.FloatTensor
+                ).to(device)
             _, predicted = outputs.max(1)
             correct += predicted.eq(targets).sum().item()
 

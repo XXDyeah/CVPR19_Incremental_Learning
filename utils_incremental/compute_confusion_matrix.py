@@ -21,6 +21,10 @@ from utils_pytorch import *
 def compute_confusion_matrix(tg_model, tg_feature_model, class_means, evalloader, print_info=False, device=None):
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # Move models to the target device so their weights match the input
+    # tensors' device type.
+    tg_model = tg_model.to(device)
+    tg_feature_model = tg_feature_model.to(device)
     tg_model.eval()
     tg_feature_model.eval()
 
