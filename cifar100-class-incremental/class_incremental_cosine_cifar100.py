@@ -106,7 +106,7 @@ parser.add_argument('--nb_runs', default=1, type=int, \
     help='Number of runs (random ordering of classes at each run)')
 parser.add_argument('--ckp_prefix', default=os.path.basename(sys.argv[0])[:-3], type=str, \
     help='Checkpoint prefix')
-parser.add_argument('--epochs', default=160, type=int, \
+parser.add_argument('--epochs', default=2, type=int, \
     help='Epochs')    # ############################################### 160
 parser.add_argument('--T', default=2, type=float, \
     help='Temporature for distialltion')
@@ -401,6 +401,7 @@ for iteration_total in range(args.nb_runs):
         base_dataset = IndexedDataset(trainset)
         tiaw_module = None
         if iteration > start_iter:
+            print("################# doing Warm-Up ##################")
             warmup_loader = torch.utils.data.DataLoader(
                 base_dataset,
                 batch_size=train_batch_size,
@@ -411,8 +412,12 @@ for iteration_total in range(args.nb_runs):
             tg_model = warmup_model(
                 tg_model, warmup_loader, epochs=30, lr=0.01, device=device
             )
+
+            print("################# Over Warm-Up ##################")
             new_mask = map_Y_train >= iteration * args.nb_cl
             old_mask = ~new_mask
+            num_old_classes = len(np.unique(map_Y_train[old_mask]))
+            cba_module.k = num_old_classes
             dataset_new = torch.utils.data.Subset(trainset, np.where(new_mask)[0])
             dataset_old = torch.utils.data.Subset(trainset, np.where(old_mask)[0])
             cf_images, cf_labels = cba_module.generate_dataset(
