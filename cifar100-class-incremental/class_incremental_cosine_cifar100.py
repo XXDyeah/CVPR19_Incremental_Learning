@@ -349,8 +349,13 @@ for iteration_total in range(args.nb_runs):
             train_dataset = torch.utils.data.ConcatDataset([base_dataset, cf_dataset])
         else:
             train_dataset = base_dataset
-        trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=train_batch_size,
-                shuffle=True, num_workers=2)
+        trainloader = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=train_batch_size,
+            shuffle=True,
+            num_workers=2,
+            collate_fn=collate_with_soft_targets,
+        )
         tiaw_module = TIAWWeighting(num_samples=len(train_dataset), num_classes=args.num_classes, device=device)
         testset.data = X_valid_cumul.astype('uint8')
         testset.targets = map_Y_valid_cumul
