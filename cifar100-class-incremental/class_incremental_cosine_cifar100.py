@@ -146,6 +146,8 @@ parser.add_argument('--lw_mr', default=1, type=float, \
 ########################################
 parser.add_argument('--random_seed', default=1993, type=int, \
     help='random seed')
+parser.add_argument('--vqvae_ckpt', type=str, default=None, \
+                    help='path to pretrained VQ-VAE')
 args = parser.parse_args()
 
 ########################################
@@ -183,6 +185,12 @@ evalset = torchvision.datasets.CIFAR100(root='./data', train=False,
 
 # Prepare CBA/VQ-VAE (TIAW instantiated later per task)
 vqvae = VQVAE().to(device)
+if args.vqvae_ckpt:
+    state = torch.load(args.vqvae_ckpt, map_location=device)
+    vqvae.load_state_dict(state)
+    vqvae.eval()
+    for p in vqvae.parameters():
+        p.requires_grad = False
 cba_module = CBAModule(args.num_classes, vqvae, device=device)
 
 # Initialization
