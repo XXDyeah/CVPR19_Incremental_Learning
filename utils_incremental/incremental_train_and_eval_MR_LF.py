@@ -116,6 +116,7 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
             if cf_mask.any():
                 cf_logits = outputs[cf_mask]
                 cf_soft = targets[cf_mask]
+                cf_soft = cf_soft[:, :cf_logits.size(1)]
                 adv_loss = (-cf_soft * F.log_softmax(cf_logits, dim=1)).sum(dim=1)
                 loss_vec.append(cba_lambda * adv_loss)
 
