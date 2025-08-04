@@ -86,7 +86,7 @@ from utils_incremental.incremental_train_and_eval_LF import incremental_train_an
 from utils_incremental.incremental_train_and_eval_MR_LF import incremental_train_and_eval_MR_LF
 from utils_incremental.incremental_train_and_eval_AMR_LF import incremental_train_and_eval_AMR_LF
 from utils_incremental.dataset import IndexedDataset, CounterfactualDataset
-from utils_incremental.vqvae import VQVAE
+from utils_incremental.vqvae import VQVAE, pretrain_vqvae
 from utils_incremental.cba import CBAModule
 from utils_incremental.tiaw import TIAWWeighting
 from utils_incremental.dataset import collate_with_soft_targets
@@ -191,6 +191,8 @@ if args.vqvae_ckpt:
     vqvae.eval()
     for p in vqvae.parameters():
         p.requires_grad = False
+else:
+    pretrain_vqvae(vqvae, trainset, device)
 cba_module = CBAModule(args.num_classes, vqvae, device=device)
 
 # Initialization
