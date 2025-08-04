@@ -79,19 +79,20 @@ def incremental_train_and_eval_MS(epochs, tg_model, ref_model, tg_optimizer, tg_
                 raise ValueError("Expected 2 to 4 elements in data tuple, got {}".format(len(data)))
 
             inputs, targets = inputs.to(device), targets.to(device)
+            targets_int = targets.argmax(dim=1) if targets.dim() > 1 else targets
             if indices is not None:
                 indices = indices.to(device)
             tg_optimizer.zero_grad()
             outputs = tg_model(inputs)
             if iteration == start_iteration:
-                loss = nn.CrossEntropyLoss(weight_per_class)(outputs, targets)
+                loss = nn.CrossEntropyLoss(weight_per_class)(outputs, targets_int)
             else:
                 ref_outputs = ref_model(inputs)
                 #loss1 = nn.KLDivLoss()(F.log_softmax(outputs[:,:num_old_classes]/T, dim=1), \
                 #    F.softmax(ref_outputs.detach()/T, dim=1)) * T * T * beta * num_old_classes
                 ref_scores = ref_outputs.detach() / ref_model.fc.sigma.detach()
-                loss1 = nn.MSELoss()(old_scores, ref_scores.detach()) * lw_ms * num_old_classes 
-                loss2 = nn.CrossEntropyLoss(weight_per_class)(outputs, targets)
+                loss1 = nn.MSELoss()(old_scores, ref_scores.detach()) * lw_ms * num_old_classes
+                loss2 = nn.CrossEntropyLoss(weight_per_class)(outputs, targets_int)
                 loss = loss1 + loss2
             loss.backward()
             tg_optimizer.step()
@@ -102,7 +103,7 @@ def incremental_train_and_eval_MS(epochs, tg_model, ref_model, tg_optimizer, tg_
                 train_loss2 += loss2.item()
             _, predicted = outputs.max(1)
             total += targets.size(0)
-            correct += predicted.eq(targets).sum().item()
+            correct += predicted.eq(targets_int).sum().item()
 
             #if iteration == 0:
             #    msg = 'Loss: %.3f | Acc: %.3f%% (%d/%d)' % \
@@ -128,13 +129,14 @@ def incremental_train_and_eval_MS(epochs, tg_model, ref_model, tg_optimizer, tg_
         with torch.no_grad():
             for batch_idx, (inputs, targets) in enumerate(testloader):
                 inputs, targets = inputs.to(device), targets.to(device)
+                targets_int = targets.argmax(dim=1) if targets.dim() > 1 else targets
                 outputs = tg_model(inputs)
-                loss = nn.CrossEntropyLoss(weight_per_class)(outputs, targets)
+                loss = nn.CrossEntropyLoss(weight_per_class)(outputs, targets_int)
 
                 test_loss += loss.item()
                 _, predicted = outputs.max(1)
                 total += targets.size(0)
-                correct += predicted.eq(targets).sum().item()
+                correct += predicted.eq(targets_int).sum().item()
 
                 #progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 #    % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
