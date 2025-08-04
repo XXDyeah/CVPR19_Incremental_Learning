@@ -23,15 +23,18 @@ def cutmix(x1: torch.Tensor, x2: torch.Tensor, lam: float = 0.75) -> torch.Tenso
 
 def _extract_features(model: nn.Module, dataset: Dataset, device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
     """Return features and labels for ``dataset`` using ``model``."""
+    model = model.to(device)
     model.eval()
+    feature_model = nn.Sequential(*list(model.children())[:-1]).to(device)
+    feature_model.eval()
     loader = DataLoader(dataset, batch_size=128, shuffle=False, num_workers=2)
     feats, labels = [], []
     with torch.no_grad():
         for imgs, targets in loader:
             imgs = imgs.to(device)
-            feat = nn.Sequential(*list(model.children())[:-1])(imgs).view(imgs.size(0), -1)
+            feat = feature_model(imgs).view(imgs.size(0), -1)
             feats.append(feat.cpu())
-            labels.append(targets)
+            labels.append(targets.cpu())
     return torch.cat(feats), torch.cat(labels)
 
 
