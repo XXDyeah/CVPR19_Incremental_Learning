@@ -15,7 +15,7 @@ class TIAWWeighting:
     """Temporal Instability-Aware Weighting following the paper."""
 
     def __init__(self, num_samples: int, num_classes: int, window_size: int = 5,
-                 lambda_t: float = 0.5, omega_min: float = 0.5, beta: float = 1.0,
+                 lambda_t: float = 0.5, omega_min: float = 0.3, beta: float = 1.0,
                  device: torch.device = torch.device('cpu')):
         self.num_classes = num_classes
         self.device = device
@@ -44,3 +44,4 @@ class TIAWWeighting:
         for idx, p in zip(indices.tolist(), probs):
             self.history[idx].append(p.detach())
         return weights.detach()
+
