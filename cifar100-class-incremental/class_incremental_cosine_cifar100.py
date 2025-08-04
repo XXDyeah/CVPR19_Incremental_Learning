@@ -32,6 +32,10 @@ from utils_incremental.incremental_train_and_eval_MS import incremental_train_an
 from utils_incremental.incremental_train_and_eval_LF import incremental_train_and_eval_LF
 from utils_incremental.incremental_train_and_eval_MR_LF import incremental_train_and_eval_MR_LF
 from utils_incremental.incremental_train_and_eval_AMR_LF import incremental_train_and_eval_AMR_LF
+from utils_incremental.dataset import IndexedDataset, CounterfactualDataset
+from utils_incremental.vqvae import VQVAE
+from utils_incremental.cba import CBAModule
+from utils_incremental.tiaw import TIAWWeighting
 
 ######### Modifiable Settings ##########
 parser = argparse.ArgumentParser()
@@ -121,6 +125,10 @@ testset = torchvision.datasets.CIFAR100(root='./data', train=False,
                                        download=True, transform=transform_test)
 evalset = torchvision.datasets.CIFAR100(root='./data', train=False,
                                        download=False, transform=transform_test)
+
+# Prepare CBA/VQ-VAE (TIAW instantiated later per task)
+vqvae = VQVAE().to(device)
+cba_module = CBAModule(args.num_classes, vqvae, device=device)
 
 # Initialization
 dictionary_size     = 500
@@ -327,17 +335,22 @@ for iteration_total in range(args.nb_runs):
             trainset.train_data = trainset.data
         if hasattr(trainset, 'train_labels'):
             trainset.train_labels = trainset.targets
-        if iteration > start_iter and args.rs_ratio > 0 and scale_factor > 1:
-            print("Weights from sampling:", rs_sample_weights)
-            index1 = np.where(rs_sample_weights>1)[0]
-            index2 = np.where(map_Y_train<iteration*args.nb_cl)[0]
-            assert((index1==index2).all())
-            train_sampler = torch.utils.data.sampler.WeightedRandomSampler(rs_sample_weights, rs_num_samples)
-            trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, \
-                shuffle=False, sampler=train_sampler, num_workers=2)            
+        # Split new and old subsets for CBA generation
+        new_mask = map_Y_train >= iteration*args.nb_cl
+        old_mask = ~new_mask
+        dataset_new = torch.utils.data.Subset(trainset, np.where(new_mask)[0])
+        dataset_old = torch.utils.data.Subset(trainset, np.where(old_mask)[0])
+        cf_images, cf_labels = cba_module.generate_dataset(tg_model,
+            ref_model if iteration > start_iter else None, dataset_new, dataset_old)
+        base_dataset = IndexedDataset(trainset)
+        if cf_images is not None:
+            cf_dataset = CounterfactualDataset(cf_images, cf_labels, len(trainset))
+            train_dataset = torch.utils.data.ConcatDataset([base_dataset, cf_dataset])
         else:
-            trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size,
+            train_dataset = base_dataset
+        trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=train_batch_size,
                 shuffle=True, num_workers=2)
+        tiaw_module = TIAWWeighting(num_samples=len(train_dataset), num_classes=args.num_classes, device=device)
         testset.data = X_valid_cumul.astype('uint8')
         testset.targets = map_Y_valid_cumul
         if hasattr(testset, 'test_data'):
@@ -380,7 +393,8 @@ for iteration_total in range(args.nb_runs):
                     trainloader, testloader, \
                     iteration, start_iter, \
                     cur_lamda, \
-                    args.dist, args.K, args.lw_mr)                
+                    args.dist, args.K, args.lw_mr, \
+                    cba_lambda=cba_module.lambda_cba, tiaw_module=tiaw_module)
             elif args.less_forget and args.amr_loss:
                 print("incremental_train_and_eval_AMR_LF")
                 tg_model = incremental_train_and_eval_AMR_LF(args.epochs, tg_model, ref_model, tg_optimizer, tg_lr_scheduler, \

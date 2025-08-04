@@ -26,6 +26,10 @@ from utils_incremental.compute_features import compute_features
 from utils_incremental.compute_accuracy import compute_accuracy
 from utils_incremental.compute_confusion_matrix import compute_confusion_matrix
 from utils_incremental.incremental_train_and_eval import incremental_train_and_eval
+from utils_incremental.dataset import DatasetWithIndex
+from utils_incremental.vqvae import VQVAE
+from utils_incremental.cba import CBAModule
+from utils_incremental.tiaw import TIAWWeighting
 
 ######### Modifiable Settings ##########
 parser = argparse.ArgumentParser()
@@ -89,6 +93,10 @@ testset = torchvision.datasets.CIFAR100(root='./data', train=False,
                                        download=True, transform=transform_test)
 evalset = torchvision.datasets.CIFAR100(root='./data', train=False,
                                        download=False, transform=transform_test)
+
+# Prepare CBA/VQ-VAE and container for TIAW (instantiated later for each task)
+vqvae = VQVAE().to(device)
+cba_module = CBAModule(args.num_classes, vqvae, device=device)
 
 # Initialization
 dictionary_size     = 500
@@ -238,11 +246,17 @@ for iteration_total in range(args.nb_runs):
             index2 = np.where(map_Y_train<iteration*args.nb_cl)[0]
             assert((index1==index2).all())
             train_sampler = torch.utils.data.sampler.WeightedRandomSampler(rs_sample_weights, rs_num_samples)
-            trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, \
-                shuffle=False, sampler=train_sampler, num_workers=2)            
+            trainloader = torch.utils.data.DataLoader(DatasetWithIndex(trainset), batch_size=train_batch_size, \
+                shuffle=False, sampler=train_sampler, num_workers=2)
         else:
-            trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size,
+            trainloader = torch.utils.data.DataLoader(DatasetWithIndex(trainset), batch_size=train_batch_size,
                 shuffle=True, num_workers=2)
+        # instantiate TIAW for current training set
+        tiaw_module = TIAWWeighting(num_samples=len(trainset), num_classes=args.num_classes, device=device)
+        # naive confusing pair selection for CBA using two smallest labels
+        unique_labels = torch.unique(torch.tensor(map_Y_train))
+        if unique_labels.numel() >= 2:
+            cba_module.confusing_pairs = [(int(unique_labels[0]), int(unique_labels[1]))]
         # Likewise update the evaluation dataset
         testset.data = X_valid_cumul.astype('uint8')
         testset.targets = map_Y_valid_cumul
@@ -272,7 +286,8 @@ for iteration_total in range(args.nb_runs):
             tg_model = incremental_train_and_eval(args.epochs, tg_model, ref_model, tg_optimizer, tg_lr_scheduler, \
                 trainloader, testloader, \
                 iteration, start_iter, \
-                args.T, args.beta)
+                args.T, args.beta, \
+                cba_module=cba_module, tiaw_module=tiaw_module)
             if not os.path.isdir('checkpoint'):
                 os.mkdir('checkpoint')
             torch.save(tg_model, ckp_name)
