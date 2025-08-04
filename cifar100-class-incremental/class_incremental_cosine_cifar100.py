@@ -1,5 +1,58 @@
 #!/usr/bin/env python
 # coding=utf-8
+import sys
+import os
+
+# ====== 关键修复：精准添加项目根目录 ======
+# 获取当前脚本的绝对路径
+current_script = os.path.abspath(__file__)
+# 获取脚本所在目录（cifar100-class-incremental）
+script_dir = os.path.dirname(current_script)
+# 获取项目根目录（LUCIR4090）
+project_root = os.path.dirname(script_dir)
+
+# 确保路径正确（Linux区分大小写，路径必须完全匹配）
+print(f"🔍 当前脚本位置: {current_script}")
+print(f"📁 项目根目录: {project_root}")
+print(f"📂 检查utils_incremental是否存在: {os.path.join(project_root, 'utils_incremental')}")
+
+# 将项目根目录添加到sys.path（必须放在最前面）
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+    print(f"✅ 已添加项目根目录到PATH: {project_root}")
+else:
+    print(f"ℹ️ 项目根目录已在PATH中")
+
+# 验证utils_incremental是否可访问
+utils_path = os.path.join(project_root, "utils_incremental")
+if os.path.exists(utils_path):
+    print(f"🟢 找到utils_incremental目录: {utils_path}")
+    if os.path.exists(os.path.join(utils_path, "__init__.py")):
+        print("🟢 找到__init__.py文件（关键！）")
+    else:
+        print("🔴 缺少__init__.py文件！请创建空文件")
+else:
+    print(f"🔴 未找到utils_incremental目录！检查路径: {utils_path}")
+    print(f"⚠️ 当前文件结构:")
+    for root, dirs, files in os.walk(os.path.dirname(project_root), topdown=True):
+        print(f"  {os.path.relpath(root, os.path.dirname(project_root))}")
+        for d in dirs:
+            print(f"    └─ {d}/")
+        for f in files:
+            print(f"    └─ {f}")
+    sys.exit(1)
+
+# ====== 现在可以安全导入 ======
+try:
+    from utils_incremental.compute_features import compute_features
+    print("🟢 成功导入compute_features！")
+except ImportError as e:
+    print(f"🔴 导入失败: {e}")
+    print("\n当前Python搜索路径:")
+    for i, p in enumerate(sys.path):
+        print(f"  {i}: {p}")
+    sys.exit(1)
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -37,6 +90,7 @@ from utils_incremental.vqvae import VQVAE
 from utils_incremental.cba import CBAModule
 from utils_incremental.tiaw import TIAWWeighting
 from utils_incremental.dataset import collate_with_soft_targets
+from utils_incremental.warmup import warmup_model
 
 ######### Modifiable Settings ##########
 parser = argparse.ArgumentParser()
@@ -45,7 +99,7 @@ parser.add_argument('--num_classes', default=100, type=int)
 parser.add_argument('--nb_cl_fg', default=50, type=int, \
     help='the number of classes in first group')
 parser.add_argument('--nb_cl', default=10, type=int, \
-    help='Classes per group')
+    help='Classes per group')  # ############################################### 10
 parser.add_argument('--nb_protos', default=20, type=int, \
     help='Number of prototypes per class at the end')
 parser.add_argument('--nb_runs', default=1, type=int, \
@@ -53,7 +107,7 @@ parser.add_argument('--nb_runs', default=1, type=int, \
 parser.add_argument('--ckp_prefix', default=os.path.basename(sys.argv[0])[:-3], type=str, \
     help='Checkpoint prefix')
 parser.add_argument('--epochs', default=160, type=int, \
-    help='Epochs')
+    help='Epochs')    # ############################################### 160
 parser.add_argument('--T', default=2, type=float, \
     help='Temporature for distialltion')
 parser.add_argument('--beta', default=0.25, type=float, \
@@ -336,19 +390,44 @@ for iteration_total in range(args.nb_runs):
             trainset.train_data = trainset.data
         if hasattr(trainset, 'train_labels'):
             trainset.train_labels = trainset.targets
-        # Split new and old subsets for CBA generation
-        new_mask = map_Y_train >= iteration*args.nb_cl
-        old_mask = ~new_mask
-        dataset_new = torch.utils.data.Subset(trainset, np.where(new_mask)[0])
-        dataset_old = torch.utils.data.Subset(trainset, np.where(old_mask)[0])
-        cf_images, cf_labels = cba_module.generate_dataset(tg_model,
-            ref_model if iteration > start_iter else None, dataset_new, dataset_old)
         base_dataset = IndexedDataset(trainset)
-        if cf_images is not None:
-            cf_dataset = CounterfactualDataset(cf_images, cf_labels, len(trainset))
-            train_dataset = torch.utils.data.ConcatDataset([base_dataset, cf_dataset])
+        tiaw_module = None
+        if iteration > start_iter:
+            warmup_loader = torch.utils.data.DataLoader(
+                base_dataset,
+                batch_size=train_batch_size,
+                shuffle=True,
+                num_workers=2,
+                collate_fn=collate_with_soft_targets,
+            )
+            tg_model = warmup_model(
+                tg_model, warmup_loader, epochs=30, lr=0.01, device=device
+            )
+            new_mask = map_Y_train >= iteration * args.nb_cl
+            old_mask = ~new_mask
+            dataset_new = torch.utils.data.Subset(trainset, np.where(new_mask)[0])
+            dataset_old = torch.utils.data.Subset(trainset, np.where(old_mask)[0])
+            cf_images, cf_labels = cba_module.generate_dataset(
+                tg_model, ref_model, dataset_new, dataset_old
+            )
+            if cf_images is not None:
+                cf_dataset = CounterfactualDataset(
+                    cf_images, cf_labels, len(trainset)
+                )
+                train_dataset = torch.utils.data.ConcatDataset(
+                    [base_dataset, cf_dataset]
+                )
+            else:
+                train_dataset = base_dataset
+
+            tiaw_module = TIAWWeighting(
+                num_samples=len(train_dataset),
+                num_classes=args.num_classes,
+                device=device,
+            )
         else:
             train_dataset = base_dataset
+
         trainloader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=train_batch_size,
@@ -356,7 +435,6 @@ for iteration_total in range(args.nb_runs):
             num_workers=2,
             collate_fn=collate_with_soft_targets,
         )
-        tiaw_module = TIAWWeighting(num_samples=len(train_dataset), num_classes=args.num_classes, device=device)
         testset.data = X_valid_cumul.astype('uint8')
         testset.targets = map_Y_valid_cumul
         if hasattr(testset, 'test_data'):
