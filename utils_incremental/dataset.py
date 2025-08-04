@@ -48,3 +48,30 @@ class CounterfactualDataset(Dataset):
         # prevents unexpected autograd interactions during loading.
         return (self.images[idx].detach(), self.soft_labels[idx].detach(),
                 self.offset + idx, torch.ones(1, dtype=torch.long))
+
+
+def collate_with_soft_targets(batch):
+    images, targets, indices, flags = zip(*batch)
+    images = torch.stack(images)
+
+    num_classes = None
+    for t in targets:
+        if t.dim() > 0:
+            num_classes = t.size(0)
+            break
+    if num_classes is None:
+        num_classes = int(max(int(t) if t.dim() == 0 else t.argmax().item() for t in targets)) + 1
+
+    processed = []
+    for t in targets:
+        if t.dim() == 0:
+            one_hot = torch.zeros(num_classes, dtype=torch.float)
+            one_hot[t.long()] = 1.0
+            processed.append(one_hot)
+        else:
+            processed.append(t.float())
+    targets = torch.stack(processed)
+
+    indices = torch.tensor(indices, dtype=torch.long)
+    flags = torch.stack(flags)
+    return images, targets, indices, flags

@@ -32,6 +32,7 @@ from utils_incremental.incremental_train_and_eval_MS import incremental_train_an
 from utils_incremental.incremental_train_and_eval_LF import incremental_train_and_eval_LF
 from utils_incremental.incremental_train_and_eval_MR_LF import incremental_train_and_eval_MR_LF
 from utils_incremental.incremental_train_and_eval_AMR_LF import incremental_train_and_eval_AMR_LF
+from utils_incremental.dataset import collate_with_soft_targets
 
 ######### Modifiable Settings ##########
 parser = argparse.ArgumentParser()
@@ -316,10 +317,10 @@ for iteration_total in range(args.nb_runs):
             assert((index1==index2).all())
             train_sampler = torch.utils.data.sampler.WeightedRandomSampler(rs_sample_weights, rs_num_samples)
             trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, \
-                shuffle=False, sampler=train_sampler, num_workers=2)            
+                shuffle=False, sampler=train_sampler, num_workers=2, collate_fn=collate_with_soft_targets)
         else:
             trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size,
-                shuffle=True, num_workers=2)
+                shuffle=True, num_workers=2, collate_fn=collate_with_soft_targets)
         testset.data = X_valid_cumul.astype('uint8')
         testset.targets = map_Y_valid_cumul.tolist()
         if hasattr(testset, 'test_data'):

@@ -26,6 +26,7 @@ from utils_incremental.compute_features import compute_features
 from utils_incremental.compute_accuracy import compute_accuracy
 from utils_incremental.compute_confusion_matrix import compute_confusion_matrix
 from utils_incremental.incremental_train_and_eval import incremental_train_and_eval
+from utils_incremental.dataset import collate_with_soft_targets
 
 ######### Modifiable Settings ##########
 parser = argparse.ArgumentParser()
@@ -222,10 +223,10 @@ for iteration_total in range(args.nb_runs):
             assert((index1==index2).all())
             train_sampler = torch.utils.data.sampler.WeightedRandomSampler(rs_sample_weights, rs_num_samples)
             trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, \
-                shuffle=False, sampler=train_sampler, num_workers=2)            
+                shuffle=False, sampler=train_sampler, num_workers=2, collate_fn=collate_with_soft_targets)
         else:
             trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size,
-                shuffle=True, num_workers=2)
+                shuffle=True, num_workers=2, collate_fn=collate_with_soft_targets)
         # Likewise update the evaluation dataset
         testset.data = X_valid_cumul.astype('uint8')
         testset.targets = map_Y_valid_cumul.tolist()
