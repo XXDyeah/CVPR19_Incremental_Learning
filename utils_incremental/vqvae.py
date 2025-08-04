@@ -58,8 +58,8 @@ class VQVAE(nn.Module):
 
 
 def pretrain_vqvae(model: VQVAE, dataset, device: torch.device,
-                   epochs: int = 5, lr: float = 1e-3,
-                   sample_size: int = 5000, batch_size: int = 128):
+                   epochs: int = 100, lr: float = 1e-3,
+                   sample_size: int = 50000, batch_size: int = 128):
     """Light‑weight pretraining for ``VQVAE``.
 
     When no checkpoint is provided, we quickly warm up the VQ‑VAE on a
@@ -110,3 +110,4 @@ def pretrain_vqvae(model: VQVAE, dataset, device: torch.device,
     model.eval()
     for p in model.parameters():
         p.requires_grad = False
+
