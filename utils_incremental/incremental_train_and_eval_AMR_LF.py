@@ -89,17 +89,18 @@ def incremental_train_and_eval_AMR_LF(epochs, tg_model, ref_model, tg_optimizer,
                 raise ValueError("Expected 2 to 4 elements in data tuple, got {}".format(len(data)))
 
             inputs, targets = inputs.to(device), targets.to(device)
+            targets_int = targets.argmax(dim=1) if targets.dim() > 1 else targets
             if indices is not None:
                 indices = indices.to(device)
             tg_optimizer.zero_grad()
             outputs = tg_model(inputs)
             if iteration == start_iteration:
-                loss = nn.CrossEntropyLoss(weight_per_class)(outputs, targets)
+                loss = nn.CrossEntropyLoss(weight_per_class)(outputs, targets_int)
             else:
                 ref_outputs = ref_model(inputs)
                 loss1 = nn.CosineEmbeddingLoss()(cur_features, ref_features.detach(), \
                     torch.ones(inputs.shape[0]).to(device)) * lamda
-                loss2 = nn.CrossEntropyLoss(weight_per_class)(outputs, targets)
+                loss2 = nn.CrossEntropyLoss(weight_per_class)(outputs, targets_int)
                 #################################################
                 #scores before scale, [-1, 1]
                 outputs_bs = torch.cat((old_scores, new_scores), dim=1)
@@ -108,20 +109,20 @@ def incremental_train_and_eval_AMR_LF(epochs, tg_model, ref_model, tg_optimizer,
                 #print("targets:", targets.size(), targets)
                 #get groud truth scores
                 gt_index = torch.zeros(outputs_bs.size()).to(device)
-                gt_index = gt_index.scatter(1, targets.view(-1,1), 1).ge(0.5)
+                gt_index = gt_index.scatter(1, targets_int.view(-1,1), 1).ge(0.5)
                 gt_scores = outputs_bs.masked_select(gt_index)
                 #print("gt_index:", gt_index.size(), gt_index)
                 #print("gt_scores:", gt_scores.size(), gt_scores)
                 #get top-K scores on none gt classes
                 none_gt_index = torch.zeros(outputs_bs.size()).to(device)
-                none_gt_index = none_gt_index.scatter(1, targets.view(-1,1), 1).le(0.5)
+                none_gt_index = none_gt_index.scatter(1, targets_int.view(-1,1), 1).le(0.5)
                 none_gt_scores = outputs_bs.masked_select(none_gt_index).reshape((outputs_bs.size(0), outputs.size(1)-1))
                 #print("none_gt_index:", none_gt_index.size(), none_gt_index)
                 #print("none_gt_scores:", none_gt_scores.size(), none_gt_scores)
                 hard_scores = none_gt_scores.topk(K, dim=1)[0]
                 #print("hard_scores:", hard_scores.size(), hard_scores)
                 #the index of hard samples, i.e., samples of old classes
-                hard_index = targets.lt(num_old_classes)
+                hard_index = targets_int.lt(num_old_classes)
                 hard_num = torch.nonzero(hard_index).size(0)
                 #print("hard examples size: ", hard_num)
                 if  hard_num > 0:
@@ -147,7 +148,7 @@ def incremental_train_and_eval_AMR_LF(epochs, tg_model, ref_model, tg_optimizer,
                 train_loss3 += loss3.item()
             _, predicted = outputs.max(1)
             total += targets.size(0)
-            correct += predicted.eq(targets).sum().item()
+            correct += predicted.eq(targets_int).sum().item()
 
             #if iteration == 0:
             #    msg = 'Loss: %.3f | Acc: %.3f%% (%d/%d)' % \
@@ -173,13 +174,14 @@ def incremental_train_and_eval_AMR_LF(epochs, tg_model, ref_model, tg_optimizer,
         with torch.no_grad():
             for batch_idx, (inputs, targets) in enumerate(testloader):
                 inputs, targets = inputs.to(device), targets.to(device)
+                targets_int = targets.argmax(dim=1) if targets.dim() > 1 else targets
                 outputs = tg_model(inputs)
-                loss = nn.CrossEntropyLoss(weight_per_class)(outputs, targets)
+                loss = nn.CrossEntropyLoss(weight_per_class)(outputs, targets_int)
 
                 test_loss += loss.item()
                 _, predicted = outputs.max(1)
                 total += targets.size(0)
-                correct += predicted.eq(targets).sum().item()
+                correct += predicted.eq(targets_int).sum().item()
 
                 #progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 #    % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
