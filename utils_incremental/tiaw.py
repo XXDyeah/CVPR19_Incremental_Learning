@@ -31,10 +31,10 @@ class TIAWWeighting:
         for idx, p in zip(indices.tolist(), probs):
             hist = list(self.history[idx])
             if len(hist) == 0:
-                jsd = torch.zeros(1, device=self.device)
+                jsd = torch.tensor(0.0, device=self.device)
             else:
                 jsd = torch.stack([js_divergence(p.unsqueeze(0), h.unsqueeze(0)) for h in hist]).mean()
-            jsd_list.append(jsd)
+            jsd_list.append(jsd.squeeze())
         jsd_tensor = torch.stack(jsd_list).to(self.device)
         s = self.lambda_t * entropies + (1 - self.lambda_t) * jsd_tensor
         s_min = s.min()
