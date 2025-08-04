@@ -8,12 +8,12 @@ from torch.utils.data import DataLoader, Dataset, Subset
 
 from .vqvae import VQVAE
 
-
 def cutmix(x1: torch.Tensor, x2: torch.Tensor, lam: float = 0.75) -> torch.Tensor:
     """Apply CutMix with a fixed ratio as described in the paper."""
     B, C, H, W = x1.shape
     cut_w = int(W * (1 - lam) ** 0.5)
     cut_h = int(H * (1 - lam) ** 0.5)
+
     cx = random.randint(0, W - cut_w)
     cy = random.randint(0, H - cut_h)
     mixed = x1.clone()
