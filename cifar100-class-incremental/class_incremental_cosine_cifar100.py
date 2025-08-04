@@ -192,7 +192,10 @@ if args.vqvae_ckpt:
     for p in vqvae.parameters():
         p.requires_grad = False
 else:
+    print("################# No VQ-VAE_ckpt !!! ##################")
+    print("############### doing pretrain_VQ-VAE... ##############")
     pretrain_vqvae(vqvae, trainset, device)
+    print("################ OVER pretrain_VQ-VAE #################")
 cba_module = CBAModule(args.num_classes, vqvae, device=device)
 
 # Initialization
@@ -414,8 +417,8 @@ for iteration_total in range(args.nb_runs):
             tg_model = warmup_model(
                 tg_model, warmup_loader, epochs=30, lr=0.01, device=device
             )
-
             print("################# Over Warm-Up ##################")
+
             new_mask = map_Y_train >= iteration * args.nb_cl
             old_mask = ~new_mask
             num_old_classes = len(np.unique(map_Y_train[old_mask]))
