@@ -115,9 +115,24 @@ class CBAModule:
             imgs_n = self._sample_by_class(dataset_new, cn, self.m)
             imgs_o = self._sample_by_class(dataset_old, co, self.m)
             for xn, xo in zip(imgs_n, imgs_o):
-                x_cf = self.synthesize(xn, xo)
+                # ``synthesize`` produces tensors that track gradients since the
+                # generation process involves learnable modules (e.g. VQVAE).
+                #
+                # These tensors will later be fed into a ``DataLoader`` via the
+                # ``CounterfactualDataset``.  The default collation function
+                # pre-allocates the output tensor (using the ``out=`` argument of
+                # ``torch.stack``), which is incompatible with tensors that
+                # require gradients.  As a consequence the training script raised
+                # ``RuntimeError: stack(): functions with out=... arguments don't
+                # support automatic differentiation, but one of the arguments
+                # requires grad``.
+                #
+                # Detaching the generated samples and labels from the computation
+                # graph ensures ``requires_grad=False`` and avoids the crash when
+                # they are stacked by the ``DataLoader``.
+                x_cf = self.synthesize(xn, xo).detach()
                 images.append(x_cf.squeeze(0).cpu())
-                soft = torch.zeros(self.num_classes)
+                soft = torch.zeros(self.num_classes).detach()
                 soft[cn] = 0.5
                 soft[co] = 0.5
                 labels.append(soft)

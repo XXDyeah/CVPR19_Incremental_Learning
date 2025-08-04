@@ -38,5 +38,13 @@ class CounterfactualDataset(Dataset):
         return self.images.size(0)
 
     def __getitem__(self, idx):
-        return (self.images[idx], self.soft_labels[idx],
+        # Detach the returned tensors to ensure they do not carry gradient
+        # history.  Synthetic samples may be produced by neural networks and thus
+        # inadvertently retain ``requires_grad=True``.  When such tensors are
+        # collated by ``DataLoader`` (which internally uses ``torch.stack`` with
+        # an ``out`` parameter), PyTorch raises an error because automatic
+        # differentiation is not supported for that operation.  Returning detached
+        # tensors keeps the dataset agnostic to the provenance of the data and
+        # prevents unexpected autograd interactions during loading.
+        return (self.images[idx].detach(), self.soft_labels[idx].detach(),
                 self.offset + idx, torch.ones(1, dtype=torch.long))
