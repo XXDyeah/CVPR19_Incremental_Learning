@@ -105,7 +105,7 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
             cf_mask = flags == 1
 
             real_logits = outputs[real_mask]
-            real_targets = targets[real_mask].long()
+            real_targets = targets[real_mask].argmax(dim=1).long()
             loss_vec = []
             if real_mask.any():
                 loss_real = nn.CrossEntropyLoss(weight_per_class, reduction='none')(real_logits, real_targets)
@@ -132,7 +132,7 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
                 outputs_bs = torch.cat((old_scores, new_scores), dim=1)[:real_mask.sum()]
                 assert(outputs_bs.size(0) == real_mask.sum())
                 gt_index = torch.zeros(outputs_bs.size(), device=device)
-                real_targets = targets[real_mask].long()
+                real_targets = targets[real_mask].argmax(dim=1).long()
                 gt_index = gt_index.scatter(1, real_targets.view(-1,1), 1).ge(0.5)
                 gt_scores = outputs_bs.masked_select(gt_index)
                 max_novel_scores = outputs_bs[:, num_old_classes:].topk(K, dim=1)[0]
