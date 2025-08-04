@@ -16,7 +16,7 @@ import argparse
 from PIL import Image
 from scipy.spatial.distance import cdist
 from sklearn.metrics import confusion_matrix
-from utils_pytorch import *
+# from utils_pytorch import *
 
 cur_features = []
 ref_features = []
@@ -76,8 +76,21 @@ def incremental_train_and_eval_AMR_LF(epochs, tg_model, ref_model, tg_optimizer,
         tg_lr_scheduler.step()
         print('\nEpoch: %d, LR: ' % epoch, end='')
         print(tg_lr_scheduler.get_lr())
-        for batch_idx, (inputs, targets) in enumerate(trainloader):
+        for batch_idx, data in enumerate(trainloader):
+            if len(data) == 2:
+                inputs, targets = data
+                indices = flags = None
+            elif len(data) == 3:
+                inputs, targets, indices = data
+                flags = None
+            elif len(data) == 4:
+                inputs, targets, indices, flags = data
+            else:
+                raise ValueError("Expected 2 to 4 elements in data tuple, got {}".format(len(data)))
+
             inputs, targets = inputs.to(device), targets.to(device)
+            if indices is not None:
+                indices = indices.to(device)
             tg_optimizer.zero_grad()
             outputs = tg_model(inputs)
             if iteration == start_iteration:

@@ -16,7 +16,7 @@ import argparse
 from PIL import Image
 from scipy.spatial.distance import cdist
 from sklearn.metrics import confusion_matrix
-from utils_pytorch import *
+# from utils_pytorch import *
 
 def compute_confusion_matrix(tg_model, tg_feature_model, class_means, evalloader, print_info=False, device=None):
     if device is None:
@@ -49,26 +49,26 @@ def compute_confusion_matrix(tg_model, tg_feature_model, class_means, evalloader
         for batch_idx, (inputs, targets) in enumerate(evalloader):
             inputs, targets = inputs.to(device), targets.to(device)
             total += targets.size(0)
-            all_targets.append(targets)
+            all_targets.append(targets.cpu())
 
             outputs = tg_model(inputs)
             _, predicted = outputs.max(1)
             correct += predicted.eq(targets).sum().item()
-            all_predicted.append(predicted)
+            all_predicted.append(predicted.cpu())
 
-            outputs_feature = np.squeeze(tg_feature_model(inputs))
+            outputs_feature = np.squeeze(tg_feature_model(inputs)).cpu().numpy()
             # Compute score for iCaRL
             sqd_icarl = cdist(class_means[:,:,0].T, outputs_feature, 'sqeuclidean')
             score_icarl = torch.from_numpy((-sqd_icarl).T).to(device)
             _, predicted_icarl = score_icarl.max(1)
             correct_icarl += predicted_icarl.eq(targets).sum().item()
-            all_predicted_icarl.append(predicted_icarl)
+            all_predicted_icarl.append(predicted_icarl.cpu())
             # Compute score for NCM
             sqd_ncm = cdist(class_means[:,:,1].T, outputs_feature, 'sqeuclidean')
             score_ncm = torch.from_numpy((-sqd_ncm).T).to(device)
             _, predicted_ncm = score_ncm.max(1)
             correct_ncm += predicted_ncm.eq(targets).sum().item()
-            all_predicted_ncm.append(predicted_ncm)
+            all_predicted_ncm.append(predicted_ncm.cpu())
             # print(sqd_icarl.shape, score_icarl.shape, predicted_icarl.shape, \
                   # sqd_ncm.shape, score_ncm.shape, predicted_ncm.shape)
 
