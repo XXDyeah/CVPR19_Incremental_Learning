@@ -80,7 +80,6 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
                     #m.bias.requires_grad = False
         train_loss = 0
         train_loss1 = 0
-        train_loss2 = 0
         train_loss3 = 0
         correct = 0
         total = 0
@@ -103,6 +102,7 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
 
             real_mask = flags == 0
             cf_mask = flags == 1
+            weights_cat = torch.cat([weights[real_mask], weights[cf_mask]])
 
             real_logits = outputs[real_mask]
             real_targets = targets[real_mask].argmax(dim=1).long()
@@ -121,16 +121,16 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
                 loss_vec.append(cba_lambda * adv_loss)
 
             loss_vec = torch.cat(loss_vec)
-            loss_cls = (loss_vec * weights).mean()
+            loss_cls = (loss_vec * weights_cat).mean()
 
             if iteration == start_iteration:
                 loss = loss_cls
             else:
                 ref_outputs = ref_model(inputs[real_mask])
-                loss1 = nn.CosineEmbeddingLoss()(cur_features[:real_mask.sum()], ref_features.detach(), \
+                loss1 = nn.CosineEmbeddingLoss()(cur_features[real_mask], ref_features.detach(), \
                     torch.ones(real_mask.sum(), device=device)) * lamda
                 #################################################
-                outputs_bs = torch.cat((old_scores, new_scores), dim=1)[:real_mask.sum()]
+                outputs_bs = torch.cat((old_scores, new_scores), dim=1)[real_mask]
                 assert(outputs_bs.size(0) == real_mask.sum())
                 gt_index = torch.zeros(outputs_bs.size(), device=device)
                 real_targets = targets[real_mask].argmax(dim=1).long()
@@ -149,7 +149,6 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
                 else:
                     loss3 = torch.zeros(1).to(device)
                 #################################################
-                loss2 = (loss_real * weights[real_mask]).mean()
                 loss = loss1 + loss_cls + loss3
             loss.backward()
             tg_optimizer.step()
@@ -157,7 +156,6 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
             train_loss += loss.item()
             if iteration > start_iteration:
                 train_loss1 += loss1.item()
-                train_loss2 += loss2.item()
                 train_loss3 += loss3.item()
             _, predicted = real_logits.max(1)
             total += real_targets.size(0)
@@ -167,16 +165,16 @@ def incremental_train_and_eval_MR_LF(epochs, tg_model, ref_model, tg_optimizer, 
             #    msg = 'Loss: %.3f | Acc: %.3f%% (%d/%d)' % \
             #    (train_loss/(batch_idx+1), 100.*correct/total, correct, total)
             #else:
-            #    msg = 'Loss1: %.3f Loss2: %.3f Loss: %.3f | Acc: %.3f%% (%d/%d)' % \
-            #    (loss1.item(), loss2.item(), train_loss/(batch_idx+1), 100.*correct/total, correct, total)
+            #    msg = 'Loss1: %.3f Loss3: %.3f Loss: %.3f | Acc: %.3f%% (%d/%d)' % \
+            #    (loss1.item(), loss3.item(), train_loss/(batch_idx+1), 100.*correct/total, correct, total)
             #progress_bar(batch_idx, len(trainloader), msg)
         if iteration == start_iteration:
             print('Train set: {}, Train Loss: {:.4f} Acc: {:.4f}'.format(\
                 len(trainloader), train_loss/(batch_idx+1), 100.*correct/total))
         else:
-            print('Train set: {}, Train Loss1: {:.4f}, Train Loss2: {:.4f}, Train Loss3: {:.4f},\
+            print('Train set: {}, Train Loss1: {:.4f}, Train Loss3: {:.4f},\
                 Train Loss: {:.4f} Acc: {:.4f}'.format(len(trainloader), \
-                train_loss1/(batch_idx+1), train_loss2/(batch_idx+1), train_loss3/(batch_idx+1),
+                train_loss1/(batch_idx+1), train_loss3/(batch_idx+1),
                 train_loss/(batch_idx+1), 100.*correct/total))
 
         #eval
